@@ -332,6 +332,7 @@ Route::prefix(config('fleetbase.api.routing.prefix', '/'))->namespace('Fleetbase
                                     $router->post('services-config', $controller('saveServicesConfig'));
                                     $router->post('test-sms-provider-config', $controller('testSmsProviderConfig'));
                                     $router->post('test-twilio-config', $controller('testTwilioConfig'));
+                                    $router->post('test-termii-config', $controller('testTermiiConfig'));
                                     $router->post('test-sentry-config', $controller('testSentryConfig'));
                                     $router->post('branding', $controller('saveBrandingSettings'));
                                     $router->put('branding', $controller('saveBrandingSettings'));

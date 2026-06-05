@@ -23,6 +23,7 @@ use Fleetbase\Models\Role;
 use Fleetbase\Models\User;
 use Fleetbase\Models\VerificationCode;
 use Fleetbase\Notifications\UserForgotPassword;
+use Fleetbase\Services\SmsService;
 use Fleetbase\Support\Auth;
 use Fleetbase\Support\TwoFactorAuth;
 use Fleetbase\Support\Utils;
