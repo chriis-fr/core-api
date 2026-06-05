@@ -462,6 +462,12 @@ class SettingController extends Controller
         $twilioToken = config('services.twilio.token', env('TWILIO_TOKEN'));
         $twilioFrom  = config('services.twilio.from', env('TWILIO_FROM'));
 
+        /** termii service */
+        $termiiApiKey  = config('services.termii.api_key', env('TERMII_API_KEY'));
+        $termiiFrom    = config('services.termii.from', env('TERMII_FROM'));
+        $termiiChannel = config('services.termii.channel', env('TERMII_CHANNEL', 'dnd'));
+        $termiiType    = config('services.termii.type', env('TERMII_TYPE', 'plain'));
+
         /** sentry service */
         $sentryDsn = config('sentry.dsn', env('SENTRY_LARAVEL_DSN', env('SENTRY_DSN')));
 
@@ -475,6 +481,10 @@ class SettingController extends Controller
             'twilioSid'        => $twilioSid,
             'twilioToken'      => $twilioToken,
             'twilioFrom'       => $twilioFrom,
+            'termiiApiKey'     => $termiiApiKey,
+            'termiiFrom'       => $termiiFrom,
+            'termiiChannel'    => $termiiChannel,
+            'termiiType'       => $termiiType,
             'sentryDsn'        => $sentryDsn,
         ]);
     }
@@ -490,12 +500,14 @@ class SettingController extends Controller
         $ipinfo     = $request->input('ipinfo', config('services.ipinfo'));
         $googleMaps = $request->input('googleMaps', config('services.google_maps'));
         $twilio     = $request->input('twilio', config('services.twilio'));
+        $termii     = $request->input('termii', config('services.termii'));
         $sentry     = $request->input('sentry', config('sentry.dsn'));
 
         Setting::configureSystem('services.aws', array_merge(config('services.aws', []), $aws));
         Setting::configureSystem('services.ipinfo', array_merge(config('services.ipinfo', []), $ipinfo));
         Setting::configureSystem('services.google_maps', array_merge(config('services.google_maps', []), $googleMaps));
         Setting::configureSystem('services.twilio', array_merge(config('services.twilio', []), $twilio));
+        Setting::configureSystem('services.termii', array_merge(config('services.termii', []), $termii));
         Setting::configureSystem('services.sentry', array_merge(config('sentry', []), $sentry));
 
         // Refresh config
@@ -759,6 +771,51 @@ class SettingController extends Controller
             $message = $e->getMessage();
             $status  = 'error';
         } catch (\ErrorException $e) {
+            $message = $e->getMessage();
+            $status  = 'error';
+        }
+
+        return response()->json(['status' => $status, 'message' => $message]);
+    }
+
+    /**
+     * Sends a test SMS message using Termii.
+     *
+     * @param Request $request the incoming HTTP request containing the authenticated user
+     *
+     * @return \Illuminate\Http\JsonResponse returns a JSON response with a success message and HTTP status 200
+     */
+    public function testTermiiConfig(AdminRequest $request)
+    {
+        $apiKey  = $request->input('api_key');
+        $from    = $request->input('from');
+        $phone   = $request->input('phone');
+        $channel = $request->input('channel', 'dnd');
+        $type    = $request->input('type', 'plain');
+
+        if (!$phone) {
+            return response()->json(['status' => 'error', 'message' => 'No test phone number provided!']);
+        }
+
+        $normalizedPhone = preg_replace('/[^0-9]/', '', $phone);
+        if (strlen($normalizedPhone) < 7) {
+            return response()->json(['status' => 'error', 'message' => 'Phone number is too short. Use international format without the + sign (e.g. 2348012345678).']);
+        }
+
+        config([
+            'services.termii.api_key' => $apiKey,
+            'services.termii.from' => $from,
+            'services.termii.channel' => $channel,
+            'services.termii.type' => $type,
+        ]);
+
+        $message = 'Termii configuration is successful, SMS sent to ' . $phone . '.';
+        $status  = 'success';
+
+        try {
+            $termiiService = new \Fleetbase\Services\TermiiSmsService();
+            $termiiService->send($phone, 'This is a Termii test from Fleetbase', $from);
+        } catch (\Throwable $e) {
             $message = $e->getMessage();
             $status  = 'error';
         }

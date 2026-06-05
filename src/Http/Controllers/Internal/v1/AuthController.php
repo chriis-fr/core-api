@@ -21,10 +21,10 @@ use Fleetbase\Models\Invite;
 use Fleetbase\Models\User;
 use Fleetbase\Models\VerificationCode;
 use Fleetbase\Notifications\UserForgotPassword;
+use Fleetbase\Services\SmsService;
 use Fleetbase\Support\Auth;
 use Fleetbase\Support\TwoFactorAuth;
 use Fleetbase\Support\Utils;
-use Fleetbase\Twilio\Support\Laravel\Facade as Twilio;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -271,10 +271,10 @@ class AuthController extends Controller
         $verifyCode    = mt_rand(100000, 999999);
         $verifyCodeKey =  Str::slug($queryPhone . '_verify_code', '_');
 
-        // Send user their verification code
+        // Send user their verification code using Termii
         try {
-            Twilio::message($queryPhone, 'Your Fleetbase authentication code is ' . $verifyCode);
-        } catch (\Exception|\Twilio\Exceptions\RestException $e) {
+            SmsService::sendSms($queryPhone, 'Your Fleetbase authentication code is ' . $verifyCode, [], SmsService::PROVIDER_TERMII);
+        } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 400);
         }
 

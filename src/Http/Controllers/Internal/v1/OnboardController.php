@@ -141,14 +141,15 @@ class OnboardController extends Controller
 
         // Get user using id
         $user = User::where('uuid', $decodedId)->first();
+        if (!$user) {
+            return response()->error('No user found for this verification session.');
+        }
+
         if ($user->phone !== $phone) {
             return response()->error('Phone number provided does not match for this verification session.');
         }
 
-        if ($user) {
-            // create verification code
-            VerificationCode::generateSmsVerificationFor($user);
-        }
+        VerificationCode::generateSmsVerificationFor($user);
 
         return response()->json([
             'status' => 'ok',

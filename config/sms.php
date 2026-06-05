@@ -9,11 +9,11 @@ return [
     | This option controls the default SMS provider that will be used to send
     | messages. You may set this to any of the providers defined below.
     |
-    | Supported: "twilio", "callpro"
+    | Supported: "twilio", "callpro", "termii"
     |
     */
 
-    'default_provider' => env('SMS_DEFAULT_PROVIDER', 'twilio'),
+    'default_provider' => env('SMS_DEFAULT_PROVIDER', 'termii'),
 
     /*
     |--------------------------------------------------------------------------
@@ -62,11 +62,15 @@ return [
 
     'providers' => [
         'twilio' => [
-            'enabled' => env('TWILIO_ENABLED', true),
+            'enabled' => env('TWILIO_ENABLED', false),
         ],
 
         'callpro' => [
             'enabled' => env('CALLPRO_ENABLED', true),
+        ],
+
+        'termii' => [
+            'enabled' => env('TERMII_ENABLED', true),
         ],
     ],
 ];

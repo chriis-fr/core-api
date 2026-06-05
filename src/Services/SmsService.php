@@ -13,6 +13,7 @@ class SmsService
      */
     public const PROVIDER_TWILIO  = 'twilio';
     public const PROVIDER_CALLPRO = 'callpro';
+    public const PROVIDER_TERMII  = 'termii';
 
     /**
      * Default SMS provider.
@@ -60,7 +61,9 @@ class SmsService
         $normalizedPhone = $this->normalizePhoneNumber($to);
 
         // Determine provider
-        $selectedProvider = $provider ?? $this->determineProvider($normalizedPhone);
+        $selectedProvider = $provider !== null
+            ? $this->ensureProviderUsable($provider)
+            : $this->resolveAutoProvider($normalizedPhone);
 
         Log::info('Sending SMS', [
             'to'       => $to,
@@ -71,6 +74,7 @@ class SmsService
         try {
             $result = match ($selectedProvider) {
                 self::PROVIDER_CALLPRO => $this->sendViaCallPro($normalizedPhone, $text, $options),
+                self::PROVIDER_TERMII  => $this->sendViaTermii($normalizedPhone, $text, $options),
                 self::PROVIDER_TWILIO  => $this->sendViaTwilio($normalizedPhone, $text, $options),
                 default                => throw new \InvalidArgumentException("Unsupported SMS provider: {$selectedProvider}"),
             };
@@ -110,9 +114,9 @@ class SmsService
         $callProService = new CallProSmsService();
 
         if (!$callProService->isConfigured()) {
-            Log::warning('CallPro not configured, falling back to Twilio');
+            Log::warning('CallPro not configured, falling back to next available provider');
 
-            return $this->sendViaTwilio($to, $text, $options);
+            return $this->send($to, $text, $options, $this->findFallbackProvider(self::PROVIDER_CALLPRO));
         }
 
         // Keep Mongolia routing backward compatible while allowing documented international format.
@@ -134,6 +138,30 @@ class SmsService
         ], static fn ($value) => $value !== null && $value !== '');
 
         return $callProService->send($toNumber, $text, $from, $callProOptions);
+    }
+
+    /**
+     * Send SMS via Termii.
+     *
+     * @param string $to      Recipient phone number
+     * @param string $text    Message text
+     * @param array  $options Additional options (from, etc.)
+     *
+     * @return array Response from Termii service
+     *
+     * @throws \Exception If Termii sending fails
+     */
+    protected function sendViaTermii(string $to, string $text, array $options = []): array
+    {
+        $termiiService = new TermiiSmsService();
+
+        if (!$termiiService->isConfigured()) {
+            Log::warning('Termii not configured, falling back to next available provider');
+
+            return $this->send($to, $text, $options, $this->findFallbackProvider(self::PROVIDER_TERMII));
+        }
+
+        return $termiiService->send($to, $text, data_get($options, 'from'));
     }
 
     /**
@@ -203,6 +231,95 @@ class SmsService
     }
 
     /**
+     * Resolve the provider to use for automatic routing.
+     */
+    protected function resolveAutoProvider(string $phoneNumber): string
+    {
+        $provider = $this->determineProvider($phoneNumber);
+
+        if ($this->isProviderUsable($provider)) {
+            return $provider;
+        }
+
+        return $this->findFallbackProvider($provider);
+    }
+
+    /**
+     * Ensure the explicitly requested provider is enabled and configured.
+     *
+     * @throws \InvalidArgumentException
+     */
+    protected function ensureProviderUsable(string $provider): string
+    {
+        if (!$this->isProviderUsable($provider)) {
+            throw new \InvalidArgumentException("SMS provider {$provider} is disabled or not configured.");
+        }
+
+        return $provider;
+    }
+
+    /**
+     * Find the next available provider when the preferred one is unavailable.
+     *
+     * @throws \RuntimeException
+     */
+    protected function findFallbackProvider(string $preferredProvider): string
+    {
+        $providers = [self::PROVIDER_TERMII, self::PROVIDER_CALLPRO, self::PROVIDER_TWILIO];
+
+        foreach ($providers as $provider) {
+            if ($provider === $preferredProvider) {
+                continue;
+            }
+
+            if ($this->isProviderUsable($provider)) {
+                return $provider;
+            }
+        }
+
+        throw new \RuntimeException('No enabled SMS provider is available.');
+    }
+
+    /**
+     * Check whether a provider is enabled and configured.
+     */
+    protected function isProviderUsable(string $provider): bool
+    {
+        return $this->isProviderEnabled($provider) && $this->isProviderConfigured($provider);
+    }
+
+    /**
+     * Check whether a provider is enabled in config.
+     */
+    protected function isProviderEnabled(string $provider): bool
+    {
+        return config("sms.providers.{$provider}.enabled", true);
+    }
+
+    /**
+     * Check whether a provider has valid configuration.
+     */
+    protected function isProviderConfigured(string $provider): bool
+    {
+        return match ($provider) {
+            self::PROVIDER_TWILIO  => $this->isTwilioConfigured(),
+            self::PROVIDER_CALLPRO => (new CallProSmsService())->isConfigured(),
+            self::PROVIDER_TERMII  => (new TermiiSmsService())->isConfigured(),
+            default                => false,
+        };
+    }
+
+    /**
+     * Determine whether Twilio is configured.
+     */
+    protected function isTwilioConfigured(): bool
+    {
+        return !empty(config('services.twilio.sid'))
+            && !empty(config('services.twilio.token'))
+            && !empty(config('services.twilio.from'));
+    }
+
+    /**
      * Normalize phone number by removing formatting characters.
      *
      * Fleetbase already ensures all phone numbers are in E.164 format with + prefix,
@@ -247,14 +364,18 @@ class SmsService
         $providers = [
             self::PROVIDER_TWILIO => [
                 'name'      => 'Twilio',
-                'available' => true, // Twilio is always available if configured
+                'available' => $this->isProviderUsable(self::PROVIDER_TWILIO),
             ],
         ];
 
-        $callProService                    = new CallProSmsService();
         $providers[self::PROVIDER_CALLPRO] = [
             'name'      => 'CallPro/MessagePro.mn',
-            'available' => $callProService->isConfigured(),
+            'available' => $this->isProviderUsable(self::PROVIDER_CALLPRO),
+        ];
+
+        $providers[self::PROVIDER_TERMII] = [
+            'name'      => 'Termii',
+            'available' => $this->isProviderUsable(self::PROVIDER_TERMII),
         ];
 
         return $providers;
