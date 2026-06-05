@@ -10,11 +10,11 @@ return [
     | messages. You may set this to any of the providers defined below.
     |
     | Supported: "twilio", "callpro", "vonage", "messagebird", "aws_sns",
-    |            "smpp", "custom_http"
+    |            "smpp", "custom_http", "termii"
     |
     */
 
-    'default_provider' => env('SMS_DEFAULT_PROVIDER', 'twilio'),
+    'default_provider' => env('SMS_DEFAULT_PROVIDER', 'termii'),
 
     /*
     |--------------------------------------------------------------------------
@@ -63,7 +63,7 @@ return [
 
     'providers' => [
         'twilio' => [
-            'enabled' => env('TWILIO_ENABLED', true),
+            'enabled' => env('TWILIO_ENABLED', false),
         ],
 
         'callpro' => [
@@ -223,6 +223,16 @@ return [
             'storefront_login'        => ['destination' => ['cooldown_seconds' => 30, 'per_hour' => 5, 'per_day' => 10]],
             'fleetops_customer_login' => ['destination' => ['cooldown_seconds' => 30, 'per_hour' => 5, 'per_day' => 10]],
             'driver_login'            => ['destination' => ['cooldown_seconds' => 30, 'per_hour' => 5, 'per_day' => 10]],
+        ],
+
+        // Chains FleetOps: Termii is the default SMS provider.
+        'termii' => [
+            'enabled'  => env('TERMII_ENABLED', true),
+            'api_key'  => env('TERMII_API_KEY', ''),
+            'from'     => env('TERMII_FROM', ''),
+            'base_url' => env('TERMII_BASE_URL', 'https://v3.api.termii.com'),
+            'channel'  => env('TERMII_CHANNEL', 'dnd'),
+            'type'     => env('TERMII_TYPE', 'plain'),
         ],
     ],
 ];

@@ -22,6 +22,7 @@ class SmsService
     public const PROVIDER_AWS_SNS     = 'aws_sns';
     public const PROVIDER_SMPP        = 'smpp';
     public const PROVIDER_CUSTOM_HTTP = 'custom_http';
+    public const PROVIDER_TERMII      = 'termii';
 
     /**
      * Default SMS provider.
@@ -98,7 +99,17 @@ class SmsService
         $options = SmsGuard::providerOptions($options);
 
         // Determine provider
-        $selectedProvider = $provider ?? $this->determineProvider($normalizedPhone);
+        // Chains FleetOps: an explicitly requested provider must be usable; automatic routing
+        // falls back to the next usable provider (Termii, CallPro, Twilio) when the preferred one is not.
+        try {
+            $selectedProvider = $provider !== null
+                ? $this->ensureProviderUsable($provider)
+                : $this->resolveAutoProvider($normalizedPhone);
+        } catch (\Throwable $e) {
+            SmsGuard::make()->settle($reservation, false, ['provider' => $provider, 'error' => $e->getMessage()]);
+
+            throw $e;
+        }
 
         Log::info('Sending SMS', [
             'to'       => $to,
@@ -115,6 +126,7 @@ class SmsService
                 self::PROVIDER_AWS_SNS     => $this->sendViaAwsSns($normalizedPhone, $text, $options),
                 self::PROVIDER_SMPP        => $this->sendViaSmpp($normalizedPhone, $text, $options),
                 self::PROVIDER_CUSTOM_HTTP => $this->sendViaCustomHttp($normalizedPhone, $text, $options),
+                self::PROVIDER_TERMII      => $this->sendViaTermii($normalizedPhone, $text, $options),
                 default                    => throw new \InvalidArgumentException("Unsupported SMS provider: {$selectedProvider}"),
             };
 
@@ -279,6 +291,97 @@ class SmsService
     }
 
     /**
+     * Send SMS via Termii (Chains FleetOps).
+     *
+     * @throws \RuntimeException If Termii is not configured
+     */
+    protected function sendViaTermii(string $to, string $text, array $options = []): array
+    {
+        $termiiService = new TermiiSmsService();
+
+        if (!$termiiService->isConfigured()) {
+            throw new \RuntimeException('Termii is not configured.');
+        }
+
+        return $termiiService->send($to, $text, data_get($options, 'from'));
+    }
+
+    /**
+     * Resolve the provider to use for automatic routing.
+     */
+    protected function resolveAutoProvider(string $phoneNumber): string
+    {
+        $provider = $this->determineProvider($phoneNumber);
+
+        if ($this->isProviderUsable($provider)) {
+            return $provider;
+        }
+
+        return $this->findFallbackProvider($provider);
+    }
+
+    /**
+     * Ensure the explicitly requested provider is enabled and configured.
+     *
+     * @throws \InvalidArgumentException
+     */
+    protected function ensureProviderUsable(string $provider): string
+    {
+        if (!$this->isProviderUsable($provider)) {
+            throw new \InvalidArgumentException("SMS provider {$provider} is disabled or not configured.");
+        }
+
+        return $provider;
+    }
+
+    /**
+     * Find the next available provider when the preferred one is unavailable.
+     *
+     * @throws \RuntimeException
+     */
+    protected function findFallbackProvider(string $preferredProvider): string
+    {
+        $providers = [
+            self::PROVIDER_TERMII, self::PROVIDER_CALLPRO, self::PROVIDER_TWILIO, self::PROVIDER_VONAGE,
+            self::PROVIDER_MESSAGEBIRD, self::PROVIDER_AWS_SNS, self::PROVIDER_SMPP, self::PROVIDER_CUSTOM_HTTP,
+        ];
+
+        foreach ($providers as $provider) {
+            if ($provider !== $preferredProvider && $this->isProviderUsable($provider)) {
+                return $provider;
+            }
+        }
+
+        throw new \RuntimeException('No enabled SMS provider is available.');
+    }
+
+    /**
+     * Check whether a provider is enabled and configured.
+     */
+    protected function isProviderUsable(string $provider): bool
+    {
+        return (bool) config("sms.providers.{$provider}.enabled", true) && $this->isProviderConfigured($provider);
+    }
+
+    /**
+     * Check whether a provider has valid configuration.
+     */
+    protected function isProviderConfigured(string $provider): bool
+    {
+        return match ($provider) {
+            self::PROVIDER_TWILIO      => !empty(config('services.twilio.sid')) && !empty(config('services.twilio.token')) && !empty(config('services.twilio.from')),
+            self::PROVIDER_CALLPRO     => (new CallProSmsService())->isConfigured(),
+            self::PROVIDER_VONAGE      => (new VonageSmsService())->isConfigured(),
+            self::PROVIDER_MESSAGEBIRD => (new MessageBirdSmsService())->isConfigured(),
+            self::PROVIDER_AWS_SNS     => (new AwsSnsSmsService())->isConfigured(),
+            self::PROVIDER_SMPP        => (new SmppSmsService())->isConfigured(),
+            self::PROVIDER_CUSTOM_HTTP => (new CustomHttpSmsService())->isConfigured(),
+            self::PROVIDER_TERMII      => (new TermiiSmsService())->isConfigured(),
+            default                    => false,
+        };
+    }
+
+    /**
      * Determine which provider to use based on phone number.
      *
      * @param string $phoneNumber Normalized phone number
@@ -382,6 +485,11 @@ class SmsService
         $providers[self::PROVIDER_CUSTOM_HTTP] = [
             'name'      => 'Custom HTTP Gateway',
             'available' => (new CustomHttpSmsService())->isConfigured(),
+        ];
+
+        $providers[self::PROVIDER_TERMII] = [
+            'name'      => 'Termii',
+            'available' => (new TermiiSmsService())->isConfigured(),
         ];
 
         return $providers;
