@@ -368,7 +368,7 @@ class SettingController extends Controller
             'from',
             [
                 'address' => Utils::getDefaultMailFromAddress(),
-                'name'    => 'Fleetbase',
+                'name'    => 'Chains | FleetOps',
             ]
         );
         $smtp           = $request->input('smtp', []);
@@ -683,7 +683,7 @@ class SettingController extends Controller
      */
     public function testNotificationChannelsConfig(AdminRequest $request)
     {
-        $title         = $request->input('title', 'Hello World from Fleetbase 🚀');
+        $title         = $request->input('title', 'Hello World from FleetOps 🚀');
         $message       = $request->input('message', 'This is a test push notification!');
         $apnToken      = $request->input('apnToken');
         $fcmToken      = $request->input('fcmToken');

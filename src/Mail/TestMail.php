@@ -18,7 +18,7 @@ class TestMail extends Mailable
     /**
      * The test mail subject.
      */
-    public string $mailSubject = '🎉 Your Fleetbase Mail Configuration Works!';
+    public string $mailSubject;
 
     /**
      * The user the email is to.
@@ -37,6 +37,7 @@ class TestMail extends Mailable
     {
         $this->user          = $user;
         $this->sendingMailer = $sendingMailer;
+        $this->mailSubject   = '🎉 Your ' . config('app.name') . ' Mail Configuration Works!';
     }
 
     /**
