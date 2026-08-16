@@ -30,8 +30,8 @@ return [
         'sandbox' => env('SANDBOX_DB_CONNECTION', 'sandbox')
     ],
     'branding' => [
-        'logo_url' => 'https://flb-assets.s3.ap-southeast-1.amazonaws.com/static/fleetbase-logo.png',
-        'icon_url' => 'https://flb-assets.s3.ap-southeast-1.amazonaws.com/static/fleetbase-icon.png'
+        'logo_url' => env('BRANDING_LOGO_URL', 'https://flb-assets.s3.ap-southeast-1.amazonaws.com/static/fleetbase-logo.png'),
+        'icon_url' => env('BRANDING_ICON_URL', 'https://flb-assets.s3.ap-southeast-1.amazonaws.com/static/fleetbase-icon.png')
     ],
     'version' => env('FLEETBASE_VERSION', '0.7.1'),
     'instance_id' => env('FLEETBASE_INSTANCE_ID') ?? (file_exists(base_path('.fleetbase-id')) ? trim(file_get_contents(base_path('.fleetbase-id'))) : null),

@@ -9,7 +9,7 @@
 @endif
 </h2>
 
-<p>🎉 This is a test email from Fleetbase to confirm that your mail configuration works.</p>
+<p>🎉 This is a test email from {{ config('app.name') }} to confirm that your mail configuration works.</p>
 <table>
     <tbody>
         <tr>
