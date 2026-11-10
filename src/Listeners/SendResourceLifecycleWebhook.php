@@ -47,10 +47,12 @@ class SendResourceLifecycleWebhook implements ShouldQueue
         // previously handled event must never be preferred over, or leak into, this one.
         $context        = static::resolveEventContext($event);
         $restoreSession = $this->applySessionContext($context);
+        $restoreDb      = $this->applyDatabaseContext($context);
 
         try {
             $this->sendWebhooksForEvent($event, $context);
         } finally {
+            $restoreDb();
             $restoreSession();
         }
     }
@@ -219,6 +221,37 @@ class SendResourceLifecycleWebhook implements ShouldQueue
      *
      * @return callable a callback which restores the session to the state it was in before the event
      */
+    /**
+     * Chains FleetOps: run a sandbox (test key) event against the sandbox database.
+     *
+     * An API request made with a flb_test_ key switches the default connection to `sandbox`
+     * (Auth::setSandboxSession), so the order, its webhook endpoints and the event record all live
+     * there. This queued listener restored the session but not the connection, so it logged the event
+     * in the live database, resolved the model there (where it does not exist) and looked for webhook
+     * endpoints there too: test-mode webhooks were never delivered. Switch the same two config keys the
+     * request did for the duration of the job, then put them back for the next job on this worker.
+     */
+    protected function applyDatabaseContext(array $context): callable
+    {
+        if (empty($context['is_sandbox'])) {
+            return static function (): void {};
+        }
+
+        $previous = [
+            'database.default'        => config('database.default'),
+            'fleetbase.connection.db' => config('fleetbase.connection.db'),
+        ];
+
+        config([
+            'database.default'        => 'sandbox',
+            'fleetbase.connection.db' => 'sandbox',
+        ]);
+
+        return static function () use ($previous): void {
+            config($previous);
+        };
+    }
+
     public function setSessionFromEvent($event): callable
     {
         return $this->applySessionContext(static::resolveEventContext($event));
