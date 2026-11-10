@@ -92,7 +92,35 @@ class ResourceLifecycleEvent implements ShouldBroadcast
         $this->apiKey              = session('api_key');
         $this->apiEnvironment      = session('api_environment', 'live');
         $this->isSandbox           = session('is_sandbox', false);
+        $this->applyContextFromModel($model);
         $this->data                = $this->getEventData();
+    }
+
+    /**
+     * Chains FleetOps: fill in context the session does not have.
+     *
+     * Several order events are fired from a background job after the request has finished
+     * (`dispatch(fn () => event(new OrderDispatched($this)))->afterCommit()`, the same for
+     * canceled and others). In that job the session is empty, so the event was stamped with no
+     * company and as live. SendResourceLifecycleWebhook looks up endpoints by company and mode,
+     * so these webhooks were never sent, on live or in the sandbox.
+     *
+     * Only fills what is missing: a request that has a session behaves exactly as before.
+     * The company comes from the model; a model loaded from the sandbox connection marks the
+     * event as a sandbox (test) event.
+     */
+    protected function applyContextFromModel(Model $model): void
+    {
+        if (empty($this->companySession) && !empty($model->company_uuid)) {
+            $this->companySession = $model->company_uuid;
+        }
+
+        if (!$this->isSandbox && method_exists($model, 'getConnectionName') && $model->getConnectionName() === 'sandbox') {
+            $this->isSandbox = true;
+            if ($this->apiEnvironment === 'live') {
+                $this->apiEnvironment = 'test';
+            }
+        }
     }
 
     private function getInternalEventData(): array
