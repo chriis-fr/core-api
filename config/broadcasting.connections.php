@@ -16,10 +16,15 @@ use Fleetbase\Support\Utils;
 return [
     'socketcluster' => [
         'driver' => 'socketcluster',
+        // How the API itself reaches the socket server to publish. Kept separate from
+        // SOCKETCLUSTER_HOST/PORT/SECURE, which are the PUBLIC address handed to apps (the
+        // Navigator instance link reads those), so pointing phones at the public wss address
+        // does not send the server's own publishing out through the internet and back.
+        // Unset, these fall back to SOCKETCLUSTER_* and then the Docker defaults, as before.
         'options' => [
-            'secure' => Utils::castBoolean(env('SOCKETCLUSTER_SECURE', false)),
-            'host' => env('SOCKETCLUSTER_HOST', 'socket'),
-            'port' => env('SOCKETCLUSTER_PORT', 8000),
+            'secure' => Utils::castBoolean(env('SOCKETCLUSTER_PUBLISHER_SECURE', env('SOCKETCLUSTER_SECURE', false))),
+            'host' => env('SOCKETCLUSTER_PUBLISHER_HOST', env('SOCKETCLUSTER_HOST', 'socket')),
+            'port' => env('SOCKETCLUSTER_PUBLISHER_PORT', env('SOCKETCLUSTER_PORT', 8000)),
             'path' => env('SOCKETCLUSTER_PATH', '/socketcluster/'),
             'query' => [],
             // The websocket publisher sends no Origin of its own, and a socket server whose
@@ -35,7 +40,7 @@ return [
         // Turn it on once every client fetches socket tokens.
         'auth_enabled' => Utils::castBoolean(env('SOCKETCLUSTER_AUTH_ENABLED', false)),
         'auth_key'    => env('SOCKETCLUSTER_AUTH_KEY'),
-        'publish_url' => env('SOCKETCLUSTER_PUBLISH_URL', 'http://' . env('SOCKETCLUSTER_HOST', 'socket') . ':8001'),
+        'publish_url' => env('SOCKETCLUSTER_PUBLISH_URL', 'http://' . env('SOCKETCLUSTER_PUBLISHER_HOST', env('SOCKETCLUSTER_HOST', 'socket')) . ':8001'),
         'token_ttl'   => (int) env('SOCKETCLUSTER_TOKEN_TTL', 900),
 
         // Environment fallbacks for the admin socket settings (Configure -> Socket). The
