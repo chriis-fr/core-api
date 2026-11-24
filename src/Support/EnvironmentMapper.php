@@ -125,6 +125,7 @@ class EnvironmentMapper
         ['settingsKey' => 'services.google_maps', 'configKey' => 'services.google_maps'],
         ['settingsKey' => 'services.twilio', 'configKey' => 'services.twilio'],
         ['settingsKey' => 'services.twilio', 'configKey' => 'twilio.twilio.connections.twilio'],
+        ['settingsKey' => 'services.termii', 'configKey' => 'services.termii'],
         ['settingsKey' => 'services.sms', 'configKey' => 'services.sms'],
         ['settingsKey' => 'services.sms.providers', 'configKey' => 'sms.providers'],
         ['settingsKey' => 'sms.default_provider', 'configKey' => 'sms.default_provider'],

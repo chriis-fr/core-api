@@ -163,8 +163,11 @@ class TermiiSmsService
     /**
      * Get error message from Termii payload.
      */
-    protected function getErrorMessage(int $statusCode, array $body): string
+    protected function getErrorMessage(int $statusCode, ?array $body): string
     {
+        // Termii answers some refusals (a wrong key, for one) with a body that is not JSON.
+        $body = $body ?? [];
+
         if (!empty($body['message'])) {
             return (string) $body['message'];
         }
