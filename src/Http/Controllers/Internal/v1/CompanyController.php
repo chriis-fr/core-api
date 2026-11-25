@@ -90,6 +90,12 @@ class CompanyController extends FleetbaseController
             // Ownership moves through transferOwnership(); billing and lifecycle fields are platform-managed.
             if (!$request->user()?->isAdmin()) {
                 $input = Arr::except($input, self::PLATFORM_MANAGED_FIELDS);
+
+                // Which modules an organization sees is the console admin's decision
+                // (setAdminModules). An organization saving its own options keeps what it was given.
+                if (array_key_exists('options', $input)) {
+                    $input['options'] = static::keepAdminManagedOptions($input['options'], $company->options);
+                }
             }
             $input = $this->model->fillSessionAttributes($input, [], ['updated_by_uuid']);
 
@@ -458,6 +464,74 @@ class CompanyController extends FleetbaseController
         ], 'updated');
 
         return response()->json(['company' => new Organization($company->refresh())]);
+    }
+
+    /**
+     * Modules the console admin switches on or off for one organization. They are kept in
+     * the organization's options (`options.modules.<name>`), which the console reads to
+     * decide what to load. Off unless switched on.
+     */
+    public const ADMIN_MANAGED_MODULES = ['storefront'];
+
+    public function setAdminModules(string $id, AdminRequest $request): JsonResponse
+    {
+        $company = $this->resolveAdminCompany($id);
+
+        if (!$company) {
+            return response()->json(['error' => 'Organization not found.'], 404);
+        }
+
+        $changes = [];
+        foreach (self::ADMIN_MANAGED_MODULES as $module) {
+            if ($request->has($module)) {
+                $changes[$module] = $request->boolean($module);
+            }
+        }
+
+        if (!$changes) {
+            return response()->json(['error' => 'No known module given.'], 422);
+        }
+
+        $options            = static::optionsAsArray($company->options);
+        $oldModules         = is_array($options['modules'] ?? null) ? $options['modules'] : [];
+        $options['modules'] = array_merge($oldModules, $changes);
+        $company->options   = $options;
+        $company->save();
+
+        $this->logAdminCompanyActivity($request, $company, 'Organization modules changed', [
+            'old'        => ['modules' => $oldModules],
+            'attributes' => ['modules' => $options['modules']],
+        ], 'updated');
+
+        return response()->json(['company' => new Organization($company->refresh())]);
+    }
+
+    /**
+     * The options an organization may save for itself: everything it sent, except the
+     * modules, which stay as the console admin set them.
+     */
+    protected static function keepAdminManagedOptions($incoming, $current): array
+    {
+        $incoming = static::optionsAsArray($incoming);
+        $current  = static::optionsAsArray($current);
+
+        unset($incoming['modules']);
+        if (array_key_exists('modules', $current)) {
+            $incoming['modules'] = $current['modules'];
+        }
+
+        return $incoming;
+    }
+
+    protected static function optionsAsArray($options): array
+    {
+        if (is_string($options)) {
+            $options = json_decode($options, true);
+        }
+
+        $options = json_decode(json_encode($options ?? []), true);
+
+        return is_array($options) ? $options : [];
     }
 
     public function setAdminOnboarding(string $id, AdminRequest $request): JsonResponse

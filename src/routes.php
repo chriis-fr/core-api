@@ -406,6 +406,7 @@ Route::prefix(config('fleetbase.api.routing.prefix', '/'))->namespace('Fleetbase
                                     $router->get('{id}/usage', $controller('usage'));
                                     $router->patch('{id}/status', $controller('setAdminStatus'));
                                     $router->patch('{id}/onboarding', $controller('setAdminOnboarding'));
+                                    $router->patch('{id}/modules', $controller('setAdminModules'));
                                     $router->post('{id}/transfer-ownership', $controller('transferOwnershipAdmin'));
                                     $router->patch('{id}/users/{user}/activate', $controller('activateAdminUser'));
                                     $router->patch('{id}/users/{user}/deactivate', $controller('deactivateAdminUser'));
