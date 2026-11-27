@@ -108,6 +108,51 @@ class ApiCredentialController extends FleetbaseController
         } finally {
             Schema::connection('sandbox')->enableForeignKeyConstraints();
         }
+
+        if ($company) {
+            $this->ensureSandboxOrderConfigs($company);
+        }
+    }
+
+    /**
+     * Gives the sandbox copy of a company its default order types.
+     *
+     * FleetOps creates Transport and Passenger for a company when the company is created,
+     * in the live database. The copy made above carries the company across but not those,
+     * and an order sent with a test key is refused without one ("Invalid order `type` or
+     * `order_config` provided"), whatever `type` it names. The first integrator set up
+     * through Chains hit exactly that (27 Nov 2026), so the order types are made here, at
+     * the moment a company first gets a test key.
+     *
+     * FleetOps is a separate package: nothing happens when it is not installed, and a
+     * failure here never stops the key being made.
+     */
+    protected function ensureSandboxOrderConfigs(Company $company): void
+    {
+        $templates = 'Fleetbase\FleetOps\Support\OrderConfig\OrderConfigTemplates';
+        if (!class_exists($templates)) {
+            return;
+        }
+
+        // Both keys, as Auth::setSandboxSession sets them: the base Model reads the second.
+        $before = ['database.default' => config('database.default'), 'fleetbase.connection.db' => config('fleetbase.connection.db')];
+
+        try {
+            config(['database.default' => 'sandbox', 'fleetbase.connection.db' => 'sandbox']);
+
+            $sandboxCompany = Company::on('sandbox')->withoutGlobalScopes()->where('uuid', $company->uuid)->first();
+            if ($sandboxCompany) {
+                foreach (['transport', 'passenger'] as $key) {
+                    if ($templates::has($key)) {
+                        $templates::create($key, $sandboxCompany);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            logger()->warning('Could not give the sandbox company its order types: ' . $e->getMessage(), ['company' => $company->uuid]);
+        } finally {
+            config($before);
+        }
     }
 
     /**
